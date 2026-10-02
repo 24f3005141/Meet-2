@@ -1,0 +1,26 @@
+{
+  "paths": [
+    {
+      "degree": "B.Tech Computer Science",
+      "branch": "AI/ML specialization",
+      "roadmap_steps": [
+        "Year 1: Strengthen Python + DSA fundamentals, finish 2-3 guided ML courses",
+        "Year 2: Build 3-4 practice ML projects (prediction models, simple CV/NLP), contribute to GitHub",
+        "Year 3: Land an early internship as ML/Data intern, keep building project portfolio",
+        "Year 4: Capstone ML project, apply for AI/ML Engineer entry roles"
+      ],
+      "rationale": "Directly matches the stated AI/ML Engineer goal and learn-by-building preference, while using existing Python/SQL/Git basics as a starting point."
+    },
+    {
+      "degree": "B.Sc Computer Science (low-cost state university)",
+      "branch": "Software Engineering with ML electives",
+      "roadmap_steps": [
+        "Year 1: Core programming + math foundations, keep JEE prep time protected",
+        "Year 2: Take ML/AI electives, start small practice projects in free hours",
+        "Year 3: Internship in a general SDE or data team to build experience early",
+        "Year 4: Specialize coursework/projects toward ML, apply to AI/ML roles with a software-first profile"
+      ],
+      "rationale": "Fits the stated budget preference and 5-10 hrs/week availability better than a specialized AI degree, while still converging on the same AI/ML Engineer goal via electives and internships."
+    }
+  ]
+}

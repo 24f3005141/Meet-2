@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Student Profile",
+  "description": "Structured profile collected from the five onboarding forms.",
+  "type": "object",
+
+  "required": [
+    "student"
+  ],
+
+  "properties": {
+    "student": {
+      "type": "object",
+
+      "required": [
+        "past",
+        "present",
+        "situation",
+        "goal",
+        "skills"
+      ],
+
+      "properties": {
+
+        "past": {
+          "type": "object",
+
+          "required": [
+            "stream",
+            "strong_subjects",
+            "academic_level",
+            "entrance_exam_status"
+          ],
+
+          "properties": {
+
+            "stream": {
+              "type": "string",
+              "enum": [
+                "PCM",
+                "PCB",
+                "Commerce",
+                "Humanities",
+                "Vocational",
+                "Other"
+              ]
+            },
+
+            "strong_subjects": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+
+            "academic_level": {
+              "type": "string",
+              "enum": [
+                "strong",
+                "above_average",
+                "average",
+                "currently_struggling",
+                "prefer_not_to_say"
+              ]
+            },
+
+            "entrance_exam_status": {
+              "type": "array",
+
+              "items": {
+                "type": "object",
+
+                "required": [
+                  "name",
+                  "status"
+                ],
+
+                "properties": {
+
+                  "name": {
+                    "type": "string"
+                  },
+
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+
+        "present": {
+          "type": "object",
+
+          "required": [
+            "interests",
+            "work_preferences",
+            "learning_preference",
+            "current_activities"
+          ],
+
+          "properties": {
+
+            "interests": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+
+            "work_preferences": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+
+            "learning_preference": {
+              "type": "string"
+            },
+
+            "current_activities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+
+        "situation": {
+          "type": "object",
+
+          "required": [
+            "college_status",
+            "budget_preference",
+            "relocation",
+            "priorities",
+            "time_availability"
+          ],
+
+          "properties": {
+
+            "college_status": {
+              "type": "string"
+            },
+
+            "budget_preference": {
+              "type": "string"
+            },
+
+            "relocation": {
+              "type": "string"
+            },
+
+            "priorities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+
+            "time_availability": {
+              "type": "object",
+
+              "required": [
+                "hours_per_week",
+                "major_current_commitment"
+              ],
+
+              "properties": {
+
+                "hours_per_week": {
+                  "type": "string"
+                },
+
+                "major_current_commitment": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+
+        "goal": {
+          "type": "object",
+
+          "required": [
+            "career",
+            "certainty",
+            "motivations",
+            "success_definition"
+          ],
+
+          "properties": {
+
+            "career": {
+              "type": "string"
+            },
+
+            "certainty": {
+              "type": "string",
+
+              "enum": [
+                "very_certain",
+                "fairly_certain",
+                "exploring",
+                "not_sure"
+              ]
+            },
+
+            "motivations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+
+            "success_definition": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+
+        "skills": {
+          "type": "object",
+
+          "required": [
+            "technical",
+            "project_experience",
+            "independent_learning"
+          ],
+
+          "properties": {
+
+            "technical": {
+              "type": "object",
+
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+
+            "project_experience": {
+              "type": "string"
+            },
+
+            "independent_learning": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

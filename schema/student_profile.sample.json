@@ -1,0 +1,73 @@
+{
+  "student": {
+    "past": {
+      "stream": "PCM",
+      "strong_subjects": [
+        "Mathematics",
+        "Physics"
+      ],
+      "academic_level": "above_average",
+      "entrance_exam_status": [
+        {
+          "name": "JEE",
+          "status": "preparing"
+        }
+      ]
+    },
+
+    "present": {
+      "interests": [
+        "coding",
+        "problem_solving",
+        "building_projects"
+      ],
+      "work_preferences": [
+        "building_things",
+        "solving_difficult_problems"
+      ],
+      "learning_preference": "learn_by_building",
+      "current_activities": [
+        "coding",
+        "online_courses"
+      ]
+    },
+
+    "situation": {
+      "college_status": "still_comparing_options",
+      "budget_preference": "prefer_low_cost_options",
+      "relocation": "anywhere_in_india",
+      "priorities": [
+        "strong_technical_skills",
+        "early_internships"
+      ],
+      "time_availability": {
+        "hours_per_week": "5_to_10",
+        "major_current_commitment": "JEE_preparation"
+      }
+    },
+
+    "goal": {
+      "career": "AI/ML Engineer",
+      "certainty": "fairly_certain",
+      "motivations": [
+        "technology",
+        "problem_solving",
+        "job_opportunities"
+      ],
+      "success_definition": [
+        "strong_first_job",
+        "becoming_highly_skilled"
+      ]
+    },
+
+    "skills": {
+      "technical": {
+        "Python": "basic",
+        "SQL": "beginner",
+        "Git_GitHub": "beginner"
+      },
+      "project_experience": "small_practice_projects",
+      "independent_learning": "can_follow_structured_resources"
+    }
+  }
+}

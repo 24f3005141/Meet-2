@@ -1,0 +1,32 @@
+{
+  "1": {
+    "title": "What stream did you take in 12th?",
+    "subtitle": "Your academic past",
+    "type": "single_select",
+    "options": ["Science (PCM)", "Science (PCB)", "Commerce", "Arts/Humanities", "Vocational"]
+  },
+  "2": {
+    "title": "What are you actually curious about right now?",
+    "subtitle": "Your present interests",
+    "type": "multi_select",
+    "options": ["Technology", "Design", "Business", "Writing", "Science/Research", "Helping people", "Building things"]
+  },
+  "3": {
+    "title": "Have you already decided on a college or degree?",
+    "subtitle": "Your future, so far",
+    "type": "text_or_select",
+    "options": ["Not decided yet", "Yes, I'll type it in"]
+  },
+  "4": {
+    "title": "What role or internship are you aiming for?",
+    "subtitle": "Your target",
+    "type": "text_input",
+    "placeholder": "e.g. Software Engineer, UX Designer, Product Manager"
+  },
+  "5": {
+    "title": "How would you rate your current skills?",
+    "subtitle": "Where you stand today",
+    "type": "skill_rating",
+    "skills": ["Coding", "Communication", "Problem Solving", "Design Thinking"]
+  }
+}
