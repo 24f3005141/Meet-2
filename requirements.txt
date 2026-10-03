@@ -1,6 +1,6 @@
 flask==3.0.3
 python-dotenv==1.0.1
-anthropic==0.34.2
+anthropic>=1.11.0
 jsonschema==4.23.0
 gunicorn==23.0.0
 flask-cors==5.0.0

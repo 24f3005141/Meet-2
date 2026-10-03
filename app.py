@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from database import init_db, get_db, get_or_create_user
 from validation import validate_against_schema
 from llm import call_llm_for_roadmap, parse_roadmap_json, call_llm_for_copilot
+from tools.validate_roadmap import validate_roadmap as validate_roadmap_full
 
 # Load variables from a .env file (like ANTHROPIC_API_KEY) into os.environ
 load_dotenv()
@@ -357,8 +358,19 @@ def submit_profile():
 # roadmap_output.schema.json, and only saves if genuinely valid.
 # Retries once with the error fed back to the model if the first
 # attempt fails.
+#
+# REWRITTEN per docs/GENERATE_VALIDATE.md:
+#   - validation is now tools/validate_roadmap.py (schema + business-rule
+#     checks + destination-matches-profile), not schema-only
+#   - max attempts raised from 2 to 3
+#   - every attempt's raw output + FAIL lines are logged, so prompt
+#     problems stay visible (step 6 of the doc)
+#   - retry message uses the doc's exact phrasing: "Fix these problems
+#     and return JSON only: <FAIL lines>"
+#   - on total failure, the error shown to the client is the doc's exact
+#     UI message -- never an unvalidated roadmap, never hand-repaired JSON
 # ---------------------------------------------------------------
-MAX_LLM_ATTEMPTS = 2
+MAX_LLM_ATTEMPTS = 3
 
 
 @app.route("/api/generate-roadmap", methods=["POST"])
@@ -385,23 +397,33 @@ def generate_roadmap():
     profile_id = row["id"]
     profile_dict = json.loads(row["profile_json"])
 
-    last_error = None
+    retry_instruction = None
     for attempt in range(1, MAX_LLM_ATTEMPTS + 1):
         try:
-            raw_text = call_llm_for_roadmap(
-                profile_dict, retry_instruction=last_error if attempt > 1 else None
-            )
+            raw_text = call_llm_for_roadmap(profile_dict, retry_instruction=retry_instruction)
+        except Exception as e:
+            logger.error(f"[roadmap-gen attempt {attempt}] LLM call raised: {e}")
+            retry_instruction = f"Fix these problems and return JSON only: the previous call raised an error ({e})"
+            continue
+
+        logger.info(f"[roadmap-gen attempt {attempt}] raw output:\n{raw_text}")
+
+        try:
             roadmap_dict = parse_roadmap_json(raw_text)
         except Exception as e:
-            last_error = str(e)
-            continue  # try again (if attempts remain)
+            logger.info(f"[roadmap-gen attempt {attempt}] FAIL: could not parse JSON -- {e}")
+            retry_instruction = f"Fix these problems and return JSON only: output was not valid JSON ({e})"
+            continue
 
-        schema_error = validate_against_schema(roadmap_dict, "roadmap_output.schema.json")
-        if schema_error:
-            last_error = schema_error
-            continue  # try again, telling the model what was wrong
+        is_valid, failures = validate_roadmap_full(roadmap_dict, profile_dict)
+        if not is_valid:
+            logger.info(f"[roadmap-gen attempt {attempt}] FAIL lines: {failures}")
+            retry_instruction = "Fix these problems and return JSON only: " + "; ".join(failures)
+            continue
 
-        # Success -- save and return
+        # Success -- save and return. Never reaches here with an
+        # unvalidated roadmap, and the JSON saved is exactly what the
+        # LLM produced -- never hand-repaired.
         roadmap_id = save_roadmap_to_db(profile_id, roadmap_dict, user_id=user_id)
         return jsonify({
             "status": "generated",
@@ -412,10 +434,14 @@ def generate_roadmap():
             "paths": roadmap_dict["paths"],
         }), 201
 
-    # Both attempts failed -- nothing was saved
+    # All MAX_LLM_ATTEMPTS attempts failed -- nothing was saved.
+    # Doc's exact required UI message, no internal failure details leaked.
+    logger.error(
+        f"Roadmap generation failed after {MAX_LLM_ATTEMPTS} attempts "
+        f"for session {session_id}. Last failures: {locals().get('failures', retry_instruction)}"
+    )
     return jsonify({
-        "error": f"LLM failed to produce a valid roadmap after {MAX_LLM_ATTEMPTS} attempts.",
-        "last_error": last_error,
+        "error": "Roadmap could not be generated, try again",
         "session_id": session_id,
     }), 502
 
