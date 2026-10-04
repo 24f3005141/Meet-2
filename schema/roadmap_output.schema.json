@@ -1,36 +1,70 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Roadmap Output",
-  "description": "The structure the LLM (or, for now, a human-written sample) must produce for a generated roadmap.",
+  "$id": "roadmap_output.schema.json",
+  "title": "RoadmapOutput",
   "type": "object",
-
-  "required": ["paths"],
-
+  "additionalProperties": false,
+  "required": ["destination", "paths"],
   "properties": {
+    "destination": {"type": "string", "minLength": 1},
     "paths": {
       "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/path"}
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "stringList": {
+      "type": "array",
       "minItems": 1,
-      "items": {
-        "type": "object",
-
-        "required": ["degree", "branch", "roadmap_steps", "rationale"],
-
-        "properties": {
-          "degree": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "roadmap_steps": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "string"
+      "items": {"type": "string", "minLength": 1}
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path_id", "title", "education", "timeline", "why_it_fits", "tradeoffs", "milestones", "internship_strategy"],
+      "properties": {
+        "path_id": {"type": "string", "pattern": "^PATH_[A-C]$"},
+        "title": {"$ref": "#/$defs/nonEmptyString"},
+        "education": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["degree", "branch"],
+          "properties": {
+            "degree": {"$ref": "#/$defs/nonEmptyString"},
+            "branch": {"$ref": "#/$defs/nonEmptyString"}
+          }
+        },
+        "timeline": {"$ref": "#/$defs/nonEmptyString"},
+        "why_it_fits": {"$ref": "#/$defs/nonEmptyString"},
+        "tradeoffs": {"$ref": "#/$defs/stringList"},
+        "milestones": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["phase", "timeframe", "focus", "skills", "projects"],
+            "properties": {
+              "phase": {"$ref": "#/$defs/nonEmptyString"},
+              "timeframe": {"$ref": "#/$defs/nonEmptyString"},
+              "focus": {"$ref": "#/$defs/nonEmptyString"},
+              "skills": {"$ref": "#/$defs/stringList"},
+              "projects": {"type": "array", "items": {"type": "string", "minLength": 1}}
             }
-          },
-          "rationale": {
-            "type": "string"
+          }
+        },
+        "internship_strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["readiness", "target_roles", "preparation", "application_stage"],
+          "properties": {
+            "readiness": {"$ref": "#/$defs/nonEmptyString"},
+            "target_roles": {"$ref": "#/$defs/stringList"},
+            "preparation": {"$ref": "#/$defs/stringList"},
+            "application_stage": {"$ref": "#/$defs/nonEmptyString"}
           }
         }
       }
