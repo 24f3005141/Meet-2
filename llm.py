@@ -1,20 +1,27 @@
 import json
 import os
 import re
-from anthropic import Anthropic
+from google import genai
+from google.genai import types
 
 _client = None
+
+# Auto-updating alias -- always points at Google's current best Flash
+# model, so this never breaks when a dated model (e.g. gemini-2.5-flash,
+# which is being shut down 16 October 2026) gets retired. Pin to a dated
+# model ONLY if you need output to stay stable across model upgrades.
+GEMINI_MODEL = "gemini-flash-latest"
 
 
 def get_client():
     """
-    Lazy singleton -- only creates the Anthropic client the first time
-    it's actually needed. Reads ANTHROPIC_API_KEY from the environment
+    Lazy singleton -- only creates the Gemini client the first time it's
+    actually needed. Reads GEMINI_API_KEY from the environment
     automatically (loaded from .env by app.py's load_dotenv() call).
     """
     global _client
     if _client is None:
-        _client = Anthropic()
+        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     return _client
 
 
@@ -22,7 +29,8 @@ def get_client():
 # loaded from prompts/roadmap_prompt_v3_7.txt rather than inlined here, so
 # a prompt revision is a file swap, not a code change. DO NOT paraphrase or
 # "clean up" the file's wording when updating it -- every rule was written
-# to suppress a specific failure mode the model kept producing.
+# to suppress a specific failure mode the model kept producing. This is
+# model-agnostic plain text, so it needs no changes for the Gemini switch.
 PROMPT_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 ROADMAP_PROMPT_PATH = os.path.join(PROMPT_DIR, "roadmap_prompt_v3_7.txt")
 
@@ -39,7 +47,7 @@ def strip_code_fences(text):
     """
     LLMs often wrap JSON output in ```json ... ``` even when told not to.
     This strips that wrapping defensively so json.loads() doesn't choke
-    on the backticks.
+    on the backticks. Gemini does this at least as often as Claude did.
     """
     text = text.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -49,38 +57,38 @@ def strip_code_fences(text):
 
 def call_llm_for_roadmap(profile_dict, retry_instruction=None):
     """
-    Makes one call to the Claude API and returns the raw text response.
+    Makes one call to the Gemini API and returns the raw text response.
 
     retry_instruction: if the previous attempt failed (bad JSON or failed
-    schema validation), pass a description of what went wrong here --
-    it gets appended to the user message so the model can self-correct
-    on the next attempt.
+    validation), pass a description of what went wrong here -- it gets
+    appended to the user message so the model can self-correct on the
+    next attempt.
     """
     client = get_client()
 
     # The system prompt (P3's) ends with "STUDENT_PROFILE:" expecting the
-    # raw JSON right after it -- so the user message is JUST the profile,
-    # no extra wrapper text, to match how P3 engineered/tested it.
+    # raw JSON right after it -- so the user message (Gemini's "contents")
+    # is JUST the profile, no extra wrapper text, to match how P3
+    # engineered/tested it against Claude originally.
     user_message = json.dumps(profile_dict, indent=2)
     if retry_instruction:
         user_message += "\n\nIMPORTANT -- fix this before responding: " + retry_instruction
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        # Bumped from 2000 -- the new output contract (milestones with
-        # skills[]/projects[] per phase, internship_strategy, tradeoffs)
-        # is significantly larger than the old roadmap_steps list.
-        max_tokens=4000,
-        system=ROADMAP_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=ROADMAP_SYSTEM_PROMPT,
+            # Bumped from a smaller default -- the output contract
+            # (milestones with skills[]/projects[] per phase,
+            # internship_strategy, tradeoffs) is sizeable.
+            max_output_tokens=4000,
+        ),
     )
 
-    # response.content is a list of blocks (text, tool_use, etc).
-    # We only care about the text blocks, concatenated.
-    raw_text = "".join(
-        block.text for block in response.content if block.type == "text"
-    )
-    return raw_text
+    # Gemini's response.text concatenates all text parts for you --
+    # simpler than Claude's response.content list of typed blocks.
+    return response.text
 
 
 COPILOT_SYSTEM_PROMPT_TEMPLATE = """You are Meet 2's career copilot -- a friendly, encouraging assistant \
@@ -103,6 +111,21 @@ CURRENT MISSION (what they're working on right now):
 """
 
 
+def _history_to_gemini_contents(conversation_history, user_message):
+    """
+    Converts our {"role": "user"|"assistant", "content": "..."} history
+    format into Gemini's types.Content list. Gemini uses role "model"
+    where Claude/OpenAI use "assistant" -- that's the one real format
+    difference callers need not worry about.
+    """
+    contents = []
+    for turn in (conversation_history or []):
+        role = "model" if turn["role"] == "assistant" else "user"
+        contents.append(types.Content(role=role, parts=[types.Part(text=turn["content"])]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+    return contents
+
+
 def call_llm_for_copilot(profile_dict, roadmap_dict, mission_dict, user_message, conversation_history=None):
     """
     Conversational call -- unlike call_llm_for_roadmap, this returns
@@ -118,20 +141,18 @@ def call_llm_for_copilot(profile_dict, roadmap_dict, mission_dict, user_message,
         mission_json=json.dumps(mission_dict, indent=2) if mission_dict else "No active mission yet.",
     )
 
-    messages = list(conversation_history) if conversation_history else []
-    messages.append({"role": "user", "content": user_message})
+    contents = _history_to_gemini_contents(conversation_history, user_message)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=500,
-        system=system_prompt,
-        messages=messages,
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=500,
+        ),
     )
 
-    raw_text = "".join(
-        block.text for block in response.content if block.type == "text"
-    )
-    return raw_text
+    return response.text
 
 
 def parse_roadmap_json(raw_text):
