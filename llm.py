@@ -10,7 +10,7 @@ _client = None
 # model, so this never breaks when a dated model (e.g. gemini-2.5-flash,
 # which is being shut down 16 October 2026) gets retired. Pin to a dated
 # model ONLY if you need output to stay stable across model upgrades.
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 
 def get_client():
