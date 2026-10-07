@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from time import time
 from google import genai
 from google.genai import types
 
@@ -56,38 +57,26 @@ def strip_code_fences(text):
 
 
 def call_llm_for_roadmap(profile_dict, retry_instruction=None):
-    """
-    Makes one call to the Gemini API and returns the raw text response.
-
-    retry_instruction: if the previous attempt failed (bad JSON or failed
-    validation), pass a description of what went wrong here -- it gets
-    appended to the user message so the model can self-correct on the
-    next attempt.
-    """
     client = get_client()
 
-    # The system prompt (P3's) ends with "STUDENT_PROFILE:" expecting the
-    # raw JSON right after it -- so the user message (Gemini's "contents")
-    # is JUST the profile, no extra wrapper text, to match how P3
-    # engineered/tested it against Claude originally.
     user_message = json.dumps(profile_dict, indent=2)
+
     if retry_instruction:
-        user_message += "\n\nIMPORTANT -- fix this before responding: " + retry_instruction
+        user_message += (
+            "\n\nIMPORTANT -- fix this before responding: "
+            + retry_instruction
+        )
 
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=user_message,
         config=types.GenerateContentConfig(
             system_instruction=ROADMAP_SYSTEM_PROMPT,
-            # Bumped from a smaller default -- the output contract
-            # (milestones with skills[]/projects[] per phase,
-            # internship_strategy, tradeoffs) is sizeable.
-            max_output_tokens=4000,
+            max_output_tokens=8000,
+            response_mime_type="application/json",
         ),
     )
 
-    # Gemini's response.text concatenates all text parts for you --
-    # simpler than Claude's response.content list of typed blocks.
     return response.text
 
 

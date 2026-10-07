@@ -11,7 +11,13 @@ from dotenv import load_dotenv
 
 from database import init_db, get_db, get_or_create_user
 from validation import validate_against_schema
-from llm import call_llm_for_roadmap, parse_roadmap_json, call_llm_for_copilot
+from llm import (
+    call_llm_for_roadmap,
+    parse_roadmap_json,
+    call_llm_for_copilot,
+    get_client,
+    GEMINI_MODEL,
+)
 from tools.validate_roadmap import validate_roadmap as validate_roadmap_full
 
 # Load variables from a .env file (like ANTHROPIC_API_KEY) into os.environ
@@ -370,7 +376,7 @@ def submit_profile():
 #   - on total failure, the error shown to the client is the doc's exact
 #     UI message -- never an unvalidated roadmap, never hand-repaired JSON
 # ---------------------------------------------------------------
-MAX_LLM_ATTEMPTS = 3
+MAX_LLM_ATTEMPTS = 5
 
 
 @app.route("/api/generate-roadmap", methods=["POST"])
@@ -403,7 +409,16 @@ def generate_roadmap():
             raw_text = call_llm_for_roadmap(profile_dict, retry_instruction=retry_instruction)
         except Exception as e:
             logger.error(f"[roadmap-gen attempt {attempt}] LLM call raised: {e}")
-            retry_instruction = f"Fix these problems and return JSON only: the previous call raised an error ({e})"
+
+            if attempt < MAX_LLM_ATTEMPTS:
+                wait_time = 5 * attempt
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+
+            retry_instruction = (
+                f"Fix these problems and return JSON only: "
+                f"the previous call raised an error ({e})"
+            )
             continue
 
         logger.info(f"[roadmap-gen attempt {attempt}] raw output:\n{raw_text}")
@@ -418,7 +433,14 @@ def generate_roadmap():
         is_valid, failures = validate_roadmap_full(roadmap_dict, profile_dict)
         if not is_valid:
             logger.info(f"[roadmap-gen attempt {attempt}] FAIL lines: {failures}")
-            retry_instruction = "Fix these problems and return JSON only: " + "; ".join(failures)
+
+            if attempt < MAX_LLM_ATTEMPTS:
+                time.sleep(5)
+
+            retry_instruction = (
+                "Fix these problems and return JSON only: "
+                + "; ".join(failures)
+            )
             continue
 
         # Success -- save and return. Never reaches here with an
@@ -839,6 +861,30 @@ def copilot():
         "reply": reply_text,
     })
 
+@app.route("/api/test-gemini", methods=["GET"])
+def test_gemini():
+    try:
+        client = get_client()
+
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents="Reply with exactly: Gemini connection successful."
+        )
+
+        return jsonify({
+            "success": True,
+            "model": GEMINI_MODEL,
+            "response": response.text,
+        }), 200
+
+    except Exception as e:
+        logger.exception("Gemini test failed")
+
+        return jsonify({
+            "success": False,
+            "model": GEMINI_MODEL,
+            "error": str(e),
+        }), 502
 
 if __name__ == "__main__":
     # Render/Railway inject PORT -- fall back to 5000 for local dev.
