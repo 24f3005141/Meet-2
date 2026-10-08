@@ -376,7 +376,7 @@ def submit_profile():
 #   - on total failure, the error shown to the client is the doc's exact
 #     UI message -- never an unvalidated roadmap, never hand-repaired JSON
 # ---------------------------------------------------------------
-MAX_LLM_ATTEMPTS = 5
+MAX_LLM_ATTEMPTS = 3
 
 
 @app.route("/api/generate-roadmap", methods=["POST"])
@@ -404,49 +404,143 @@ def generate_roadmap():
     profile_dict = json.loads(row["profile_json"])
 
     retry_instruction = None
+    failures = None
+
     for attempt in range(1, MAX_LLM_ATTEMPTS + 1):
+
+        # =========================================================
+        # 1. CALL GEMINI
+        # =========================================================
         try:
-            raw_text = call_llm_for_roadmap(profile_dict, retry_instruction=retry_instruction)
-        except Exception as e:
-            logger.error(f"[roadmap-gen attempt {attempt}] LLM call raised: {e}")
-
-            if attempt < MAX_LLM_ATTEMPTS:
-                wait_time = 5 * attempt
-                logger.info(f"Waiting {wait_time} seconds before retry...")
-                time.sleep(wait_time)
-
-            retry_instruction = (
-                f"Fix these problems and return JSON only: "
-                f"the previous call raised an error ({e})"
+            raw_text = call_llm_for_roadmap(
+                profile_dict,
+                retry_instruction=retry_instruction
             )
-            continue
 
-        logger.info(f"[roadmap-gen attempt {attempt}] raw output:\n{raw_text}")
+        except Exception as e:
+            error_code = getattr(e, "code", None)
+            error_text = str(e)
 
+            logger.error(
+                f"[roadmap-gen attempt {attempt}] "
+                f"Gemini call failed: code={error_code}, error={error_text}"
+            )
+
+            # -----------------------------------------------------
+            # 503 = Gemini temporarily unavailable
+            # Return immediately. DO NOT retry inside Flask.
+            # -----------------------------------------------------
+            if (
+                error_code == 503
+                or "503 UNAVAILABLE" in error_text
+                or "UNAVAILABLE" in error_text
+            ):
+                logger.warning(
+                    "Gemini returned 503. "
+                    "Returning immediately instead of retrying."
+                )
+
+                return jsonify({
+                    "error": "Gemini is temporarily unavailable. Please try again.",
+                    "session_id": session_id,
+                    "retryable": True,
+                }), 503
+
+            # -----------------------------------------------------
+            # 429 = quota / rate limit
+            # Return immediately. DO NOT waste more requests.
+            # -----------------------------------------------------
+            if (
+                error_code == 429
+                or "429" in error_text
+                or "RESOURCE_EXHAUSTED" in error_text
+            ):
+                logger.warning(
+                    "Gemini quota/rate limit reached. "
+                    "Returning immediately."
+                )
+
+                return jsonify({
+                    "error": "Gemini API quota or rate limit reached. Please try again later.",
+                    "session_id": session_id,
+                    "retryable": True,
+                }), 429
+
+            # -----------------------------------------------------
+            # Other unexpected Gemini error
+            # Retry if attempts remain.
+            # NO sleep here.
+            # -----------------------------------------------------
+            if attempt < MAX_LLM_ATTEMPTS:
+                retry_instruction = (
+                    "Fix this problem and return JSON only: "
+                    f"the previous Gemini call failed with: {error_text}"
+                )
+                continue
+
+            break
+
+        logger.info(
+            f"[roadmap-gen attempt {attempt}] raw output:\n{raw_text}"
+        )
+
+        # =========================================================
+        # 2. PARSE GEMINI JSON
+        # =========================================================
         try:
             roadmap_dict = parse_roadmap_json(raw_text)
-        except Exception as e:
-            logger.info(f"[roadmap-gen attempt {attempt}] FAIL: could not parse JSON -- {e}")
-            retry_instruction = f"Fix these problems and return JSON only: output was not valid JSON ({e})"
-            continue
 
-        is_valid, failures = validate_roadmap_full(roadmap_dict, profile_dict)
+        except Exception as e:
+            error_text = str(e)
+
+            logger.error(
+                f"[roadmap-gen attempt {attempt}] "
+                f"JSON parsing failed: {error_text}"
+            )
+
+            # Retry because Gemini may have returned malformed JSON.
+            if attempt < MAX_LLM_ATTEMPTS:
+                retry_instruction = (
+                    "Fix this problem and return JSON only: "
+                    f"the previous response could not be parsed as valid JSON. "
+                    f"Parser error: {error_text}"
+                )
+                continue
+
+            break
+
+        # =========================================================
+        # 3. VALIDATE ROADMAP
+        # =========================================================
+        is_valid, failures = validate_roadmap_full(
+            roadmap_dict,
+            profile_dict
+        )
+
         if not is_valid:
-            logger.info(f"[roadmap-gen attempt {attempt}] FAIL lines: {failures}")
+            logger.info(
+                f"[roadmap-gen attempt {attempt}] "
+                f"VALIDATION FAILED: {failures}"
+            )
 
             if attempt < MAX_LLM_ATTEMPTS:
-                time.sleep(5)
+                retry_instruction = (
+                    "Fix these problems and return JSON only: "
+                    + "; ".join(failures)
+                )
+                continue
 
-            retry_instruction = (
-                "Fix these problems and return JSON only: "
-                + "; ".join(failures)
-            )
-            continue
+            break
 
-        # Success -- save and return. Never reaches here with an
-        # unvalidated roadmap, and the JSON saved is exactly what the
-        # LLM produced -- never hand-repaired.
-        roadmap_id = save_roadmap_to_db(profile_id, roadmap_dict, user_id=user_id)
+        # =========================================================
+        # 4. SUCCESS
+        # =========================================================
+        roadmap_id = save_roadmap_to_db(
+            profile_id,
+            roadmap_dict,
+            user_id=user_id
+        )
+
         return jsonify({
             "status": "generated",
             "session_id": session_id,
@@ -456,17 +550,20 @@ def generate_roadmap():
             "paths": roadmap_dict["paths"],
         }), 201
 
-    # All MAX_LLM_ATTEMPTS attempts failed -- nothing was saved.
-    # Doc's exact required UI message, no internal failure details leaked.
+    # =============================================================
+    # ALL ATTEMPTS FAILED
+    # =============================================================
     logger.error(
-        f"Roadmap generation failed after {MAX_LLM_ATTEMPTS} attempts "
-        f"for session {session_id}. Last failures: {locals().get('failures', retry_instruction)}"
+        f"Roadmap generation failed after "
+        f"{MAX_LLM_ATTEMPTS} attempts "
+        f"for session {session_id}. "
+        f"Last failures: {failures or retry_instruction}"
     )
+
     return jsonify({
         "error": "Roadmap could not be generated, try again",
         "session_id": session_id,
     }), 502
-
 
 # ---------------------------------------------------------------
 # Endpoint: POST /api/roadmap/select-path
@@ -885,6 +982,13 @@ def test_gemini():
             "model": GEMINI_MODEL,
             "error": str(e),
         }), 502
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "meet2-backend",
+    }), 200
 
 if __name__ == "__main__":
     # Render/Railway inject PORT -- fall back to 5000 for local dev.

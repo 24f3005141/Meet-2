@@ -15,14 +15,18 @@ GEMINI_MODEL = "gemini-3.6-flash"
 
 
 def get_client():
-    """
-    Lazy singleton -- only creates the Gemini client the first time it's
-    actually needed. Reads GEMINI_API_KEY from the environment
-    automatically (loaded from .env by app.py's load_dotenv() call).
-    """
     global _client
+
     if _client is None:
-        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        _client = genai.Client(
+            api_key=os.environ["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(
+                retry_options=types.HttpRetryOptions(
+                    attempts=1
+                )
+            )
+        )
+
     return _client
 
 
